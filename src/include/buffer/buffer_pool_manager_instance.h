@@ -14,6 +14,7 @@
 
 #include <list>
 #include <mutex>  // NOLINT
+#include <mutex>  // NOLINT
 #include <unordered_map>
 
 #include "buffer/buffer_pool_manager.h"
@@ -144,5 +145,13 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
+  // get write latch_
+  void InitPageInternal(frame_id_t frame_id, page_id_t page_id);
+  // get write latch_
+  bool GetFreePageInternal(frame_id_t *frame_id);
+
+  void FlushPageInternal(frame_id_t frame_id);
+
+  bool OperatePage(page_id_t page_id, const std::function<bool(frame_id_t)> &f);
 };
 }  // namespace bustub
