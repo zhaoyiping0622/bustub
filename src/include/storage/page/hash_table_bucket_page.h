@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -138,10 +139,12 @@ class HashTableBucketPage {
   void PrintBucket();
 
  private:
+  void SetUnreadable(uint32_t bucket_idx);
   //  For more on BUCKET_ARRAY_SIZE see storage/page/hash_table_page_defs.h
   char occupied_[(BUCKET_ARRAY_SIZE - 1) / 8 + 1];
   // 0 if tombstone/brand new (never occupied), 1 otherwise.
   char readable_[(BUCKET_ARRAY_SIZE - 1) / 8 + 1];
+  char padding_[PAGE_SIZE - BUCKET_ARRAY_SIZE * sizeof(MappingType) - sizeof(occupied_) - sizeof(readable_)];
   MappingType array_[0];
 };
 

@@ -136,6 +136,8 @@ class ExtendibleHashTable {
    */
   HASH_TABLE_BUCKET_TYPE *FetchBucketPage(page_id_t bucket_page_id);
 
+  HASH_TABLE_BUCKET_TYPE *FetchBucketPage(Page *page);
+
   /**
    * Performs insertion with an optional bucket splitting.
    *
@@ -159,7 +161,14 @@ class ExtendibleHashTable {
    * @param key the key that was removed
    * @param value the value that was removed
    */
-  void Merge(Transaction *transaction, const KeyType &key, const ValueType &value);
+  bool Merge(Transaction *transaction, const KeyType &key, const ValueType &value);
+
+  void Shrink(HashTableDirectoryPage *directory);
+
+  void IncrGlobalDepth(HashTableDirectoryPage *directory);
+
+  // success: true
+  bool IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t bucket_idx);
 
   // member variables
   page_id_t directory_page_id_;
@@ -169,6 +178,48 @@ class ExtendibleHashTable {
   // Readers includes inserts and removes, writers are splits and merges
   ReaderWriterLatch table_latch_;
   HashFunction<KeyType> hash_fn_;
+};
+
+class HashTableDirectoryPageWrapper {
+ public:
+  HashTableDirectoryPageWrapper(page_id_t directory_page_id, BufferPoolManager *buffer_pool_manager);
+  HashTableDirectoryPage &operator*();
+  HashTableDirectoryPage *operator->();
+  void SetDirty();
+  ~HashTableDirectoryPageWrapper();
+
+ private:
+  BufferPoolManager *buffer_pool_manager_;
+  page_id_t directory_page_id_;
+  HashTableDirectoryPage *directory_;
+  Page *page_;
+  bool is_dirty_;
+};
+
+template <typename Mutex>
+class WriteLock {
+ public:
+  explicit WriteLock(Mutex *mutex);
+  ~WriteLock();
+  void WLock();
+  void WUnlock();
+
+ private:
+  bool locked_;
+  Mutex *mutex_;
+};
+
+template <typename Mutex>
+class ReadLock {
+ public:
+  explicit ReadLock(Mutex *mutex);
+  ~ReadLock();
+  void RLock();
+  void RUnlock();
+
+ private:
+  bool locked_;
+  Mutex *mutex_;
 };
 
 }  // namespace bustub
