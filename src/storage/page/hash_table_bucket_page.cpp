@@ -118,10 +118,15 @@ bool HASH_TABLE_BUCKET_TYPE::IsFull() {
 template <typename KeyType, typename ValueType, typename KeyComparator>
 uint32_t HASH_TABLE_BUCKET_TYPE::NumReadable() {
   uint32_t ret = 0;
-  int n = sizeof(readable_) / sizeof(char);
-  for (int i = 0; i < n; i++) {
-    ret += __builtin_popcount(readable_[i]);
+  for (uint32_t i = 0; i < BUCKET_ARRAY_SIZE; i++) {
+    if (IsReadable(i)) {
+      ret++;
+    }
   }
+  // int n = sizeof(readable_) / sizeof(char);
+  // for (int i = 0; i < n; i++) {
+  //   ret += __builtin_popcount(readable_[i]);
+  // }
   return ret;
 }
 

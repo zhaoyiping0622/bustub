@@ -117,4 +117,31 @@ TEST(HashTableTest, SampleTest) {
   delete bpm;
 }
 
+TEST(HashTableTest, ATest) {
+  auto *disk_manager = new DiskManager("test.db");
+  auto *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  ExtendibleHashTable<int, int, IntComparator> ht("blah", bpm, IntComparator(), HashFunction<int>());
+
+  for (int i = 0; i < 4096; i++) {
+    ASSERT_TRUE(ht.Insert(nullptr, i, i)) << "fail at " << i << std::endl;
+    ;
+    std::vector<int> res;
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_EQ(res[0], i);
+  }
+
+  for (int i = 0; i < 4096; i++) {
+    std::vector<int> res;
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
+    ASSERT_EQ(res.size(), 1) << "fail at " << i << std::endl;
+    ASSERT_EQ(res[0], i);
+  }
+
+  disk_manager->ShutDown();
+  remove("test.db");
+  delete disk_manager;
+  delete bpm;
+}
+
 }  // namespace bustub

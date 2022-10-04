@@ -124,11 +124,6 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
     buffer_pool_manager_->UnpinPage(bucket_page_id, ret);
     return ret;
   }
-  if (!bucket->IsFull()) {
-    page->WUnlatch();
-    buffer_pool_manager_->UnpinPage(bucket_page_id, false);
-    return false;
-  }
   page->WUnlatch();
   buffer_pool_manager_->UnpinPage(bucket_page_id, false);
   read_lock.RUnlock();
@@ -155,7 +150,6 @@ bool HASH_TABLE_TYPE::SplitInsert(Transaction *transaction, const KeyType &key, 
     {
       HashTableDirectoryPageWrapper dir_page(directory_page_id_, buffer_pool_manager_);
       uint32_t bucket_idx = KeyToDirectoryIndex(key, &*dir_page);
-      dir_page->GetGlobalDepth();
       uint32_t global_depth = dir_page->GetGlobalDepth();
       if (dir_page->GetLocalDepth(bucket_idx) == global_depth) {
         if (dir_page->Size() * 2 > DIRECTORY_ARRAY_SIZE) {
@@ -259,8 +253,8 @@ void HASH_TABLE_TYPE::Shrink(HashTableDirectoryPage *directory) {
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void HASH_TABLE_TYPE::IncrGlobalDepth(HashTableDirectoryPage *directory) {
   uint32_t size = directory->Size();
-  for (uint32_t i = size * 2; i > 0; i--) {
-    directory->SetBucketPageId(i - 1, directory->GetBucketPageId((i - 1) / 2));
+  for (uint32_t i = size; i < 2 * size; i++) {
+    directory->SetBucketPageId(i, directory->GetBucketPageId(i - size));
   }
   directory->IncrGlobalDepth();
 }
@@ -276,6 +270,7 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
   HASH_TABLE_BUCKET_TYPE *bucket = FetchBucketPage(bucket_page);
   bucket_page->RLatch();
   page_id_t new_bucket_page_id[2] = {INVALID_PAGE_ID, INVALID_PAGE_ID};
+  uint32_t page_count[2] = {0, 0};
   // move data
   for (uint32_t i = 0; i < 2; i++) {
     uint32_t new_local_mask = current_local_mask << 1 | 1;
@@ -295,6 +290,7 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
             buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
             return false;
           }
+          page_count[i]++;
           if (!bucket->IsReadable(j)) {
             new_bucket->RemoveAt(j);
           }
@@ -303,6 +299,7 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
     }
     buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
   }
+  assert(page_count[0] + page_count[1] == bucket->NumReadable());
   bucket_page->RUnlatch();
   buffer_pool_manager_->UnpinPage(bucket_page_id, false);
   buffer_pool_manager_->DeletePage(bucket_page_id);
@@ -312,7 +309,7 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
       directory->IncrLocalDepth(i);
     }
   }
-  return false;
+  return true;
 }
 
 /*****************************************************************************
