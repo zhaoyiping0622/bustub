@@ -255,6 +255,7 @@ void HASH_TABLE_TYPE::IncrGlobalDepth(HashTableDirectoryPage *directory) {
   uint32_t size = directory->Size();
   for (uint32_t i = size; i < 2 * size; i++) {
     directory->SetBucketPageId(i, directory->GetBucketPageId(i - size));
+    directory->SetLocalDepth(i, directory->GetLocalDepth(i - size));
   }
   directory->IncrGlobalDepth();
 }
@@ -284,7 +285,8 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
       if (bucket->IsReadable(j)) {
         KeyType key = bucket->KeyAt(j);
         ValueType value = bucket->ValueAt(j);
-        if ((Hash(key) & new_local_mask) == new_local_value) {
+        uint32_t key_local_value = (Hash(key) & new_local_mask);
+        if (key_local_value == new_local_value) {
           if (!new_bucket->Insert(key, value, comparator_)) {
             LOG_ERROR("insert failed");
             buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
@@ -299,6 +301,8 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
     }
     buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
   }
+  LOG_INFO("page_count[0] %u page_count[1] %u num %u bucket_idx %u", page_count[0], page_count[1],
+           bucket->NumReadable(), bucket_idx);
   assert(page_count[0] + page_count[1] == bucket->NumReadable());
   bucket_page->RUnlatch();
   buffer_pool_manager_->UnpinPage(bucket_page_id, false);
