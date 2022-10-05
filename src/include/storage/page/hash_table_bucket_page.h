@@ -57,6 +57,8 @@ class HashTableBucketPage {
    * @return true if inserted, false if duplicate KV pair or bucket is full
    */
   bool Insert(KeyType key, ValueType value, KeyComparator cmp);
+  bool InsertNoCheck(KeyType key, ValueType value, KeyComparator cmp);
+  void FastInsert(KeyType key, ValueType value, uint32_t index);
 
   /**
    * Removes a key and value.
@@ -139,7 +141,9 @@ class HashTableBucketPage {
   void PrintBucket();
 
  private:
+  void ReOrganize();
   void SetUnreadable(uint32_t bucket_idx);
+  void SetUnoccupied(uint32_t bucket_idx);
   //  For more on BUCKET_ARRAY_SIZE see storage/page/hash_table_page_defs.h
   char occupied_[(BUCKET_ARRAY_SIZE - 1) / 8 + 1];
   // 0 if tombstone/brand new (never occupied), 1 otherwise.

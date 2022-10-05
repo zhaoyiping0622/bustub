@@ -281,17 +281,14 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
     if (new_page == nullptr) {
       return false;
     }
+    uint32_t tail = 0;
     for (uint32_t j = 0; j < BUCKET_ARRAY_SIZE; j++) {
       if (bucket->IsReadable(j)) {
         KeyType key = bucket->KeyAt(j);
         ValueType value = bucket->ValueAt(j);
         uint32_t key_local_value = (Hash(key) & new_local_mask);
         if (key_local_value == new_local_value) {
-          if (!new_bucket->Insert(key, value, comparator_)) {
-            LOG_ERROR("insert failed");
-            buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
-            return false;
-          }
+          new_bucket->FastInsert(key, value, tail++);
           page_count[i]++;
           if (!bucket->IsReadable(j)) {
             new_bucket->RemoveAt(j);
@@ -301,8 +298,8 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
     }
     buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
   }
-  LOG_INFO("page_count[0] %u page_count[1] %u num %u bucket_idx %u", page_count[0], page_count[1],
-           bucket->NumReadable(), bucket_idx);
+  // LOG_INFO("page_count[0] %u page_count[1] %u num %u bucket_idx %u", page_count[0], page_count[1],
+  // bucket->NumReadable(), bucket_idx);
   assert(page_count[0] + page_count[1] == bucket->NumReadable());
   bucket_page->RUnlatch();
   buffer_pool_manager_->UnpinPage(bucket_page_id, false);
