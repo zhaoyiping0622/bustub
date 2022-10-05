@@ -21,6 +21,12 @@
 #include "storage/page/hash_table_page_defs.h"
 
 namespace bustub {
+
+class BucketProperties {
+ public:
+  uint16_t readable_count_;
+};
+
 /**
  * Store indexed key and and value together within bucket page. Supports
  * non-unique keys.
@@ -57,8 +63,7 @@ class HashTableBucketPage {
    * @return true if inserted, false if duplicate KV pair or bucket is full
    */
   bool Insert(KeyType key, ValueType value, KeyComparator cmp);
-  bool InsertNoCheck(KeyType key, ValueType value, KeyComparator cmp);
-  void FastInsert(KeyType key, ValueType value, uint32_t index);
+  void InsertAt(KeyType key, ValueType value, uint32_t bucket_idx);
 
   /**
    * Removes a key and value.
@@ -141,7 +146,6 @@ class HashTableBucketPage {
   void PrintBucket();
 
  private:
-  void ReOrganize();
   void SetUnreadable(uint32_t bucket_idx);
   void SetUnoccupied(uint32_t bucket_idx);
   //  For more on BUCKET_ARRAY_SIZE see storage/page/hash_table_page_defs.h
@@ -149,6 +153,11 @@ class HashTableBucketPage {
   // 0 if tombstone/brand new (never occupied), 1 otherwise.
   char readable_[(BUCKET_ARRAY_SIZE - 1) / 8 + 1];
   char padding_[PAGE_SIZE - BUCKET_ARRAY_SIZE * sizeof(MappingType) - sizeof(occupied_) - sizeof(readable_)];
+  union {
+    MappingType value_;
+    BucketProperties properties_;
+  } tail_;
+  static_assert(sizeof(tail_) == sizeof(MappingType));
   MappingType array_[0];
 };
 

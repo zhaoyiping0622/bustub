@@ -288,7 +288,7 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
         ValueType value = bucket->ValueAt(j);
         uint32_t key_local_value = (Hash(key) & new_local_mask);
         if (key_local_value == new_local_value) {
-          new_bucket->FastInsert(key, value, tail++);
+          new_bucket->InsertAt(key, value, tail++);
           page_count[i]++;
           if (!bucket->IsReadable(j)) {
             new_bucket->RemoveAt(j);

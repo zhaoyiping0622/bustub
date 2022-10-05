@@ -121,23 +121,142 @@ TEST(HashTableTest, ATest) {
   auto *disk_manager = new DiskManager("test.db");
   auto *bpm = new BufferPoolManagerInstance(50, disk_manager);
   ExtendibleHashTable<int, int, IntComparator> ht("blah", bpm, IntComparator(), HashFunction<int>());
-  const int n = 4096;
+  const int n = 8192;
 
-  for (int i = 0; i < n; i++) {
-    ASSERT_TRUE(ht.Insert(nullptr, i, i)) << "fail at " << i << std::endl;
-    std::vector<int> res;
-    ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
-    ASSERT_EQ(res.size(), 1);
-    ASSERT_EQ(res[0], i);
+  for (int j = 0; j < 1; j++) {
+    for (int i = 0; i < n; i++) {
+      ASSERT_TRUE(ht.Insert(nullptr, i, i)) << "fail at " << i << std::endl;
+      std::vector<int> res;
+      ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
+      ASSERT_EQ(res.size(), 1);
+      ASSERT_EQ(res[0], i);
+    }
+
+    for (int i = 0; i < n; i++) {
+      ASSERT_TRUE(ht.Insert(nullptr, i, i + 1)) << "fail at " << i << std::endl;
+      std::vector<int> res;
+      std::vector<int> std = {i, i + 1};
+      ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
+      std::sort(res.begin(), res.end());
+      ASSERT_EQ(res, std);
+    }
+
+    for (int i = 0; i < n; i++) {
+      ASSERT_TRUE(ht.Remove(nullptr, i, i));
+      ASSERT_TRUE(ht.Remove(nullptr, i, i + 1));
+    }
   }
 
   for (int i = 0; i < n; i++) {
-    ASSERT_TRUE(ht.Insert(nullptr, i, i + 1)) << "fail at " << i << std::endl;
+    ASSERT_TRUE(ht.Insert(nullptr, i, i));
+    ASSERT_TRUE(ht.Insert(nullptr, i, i + 1));
     std::vector<int> res;
     std::vector<int> std = {i, i + 1};
     ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
     std::sort(res.begin(), res.end());
     ASSERT_EQ(res, std);
+  }
+  for (int i = 0; i < n; i++) {
+    ht.Remove(nullptr, i, i);
+    std::vector<int> res;
+    std::vector<int> std = {i + 1};
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &res));
+    std::sort(res.begin(), res.end());
+    ASSERT_EQ(res, std);
+  }
+
+  disk_manager->ShutDown();
+  remove("test.db");
+  delete disk_manager;
+  delete bpm;
+}
+
+TEST(HashTableTest, ConcurrentTest1) {
+  auto *disk_manager = new DiskManager("test.db");
+  auto *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  ExtendibleHashTable<int, int, IntComparator> ht("blah", bpm, IntComparator(), HashFunction<int>());
+  const int n = 1024;
+
+  std::vector<std::thread> v;
+  for (int i = 0; i < 16; i++) {
+    v.emplace_back(
+        [&](int begin, int end) {
+          for (int i = begin; i < end; i++) {
+            ASSERT_TRUE(ht.Insert(nullptr, i, i));
+          }
+        },
+        i * n, i * n + n);
+  }
+  for (auto &x : v) {
+    x.join();
+  }
+  ht.VerifyIntegrity();
+  for (int i = 0; i < 16 * n; i++) {
+    std::vector<int> vv;
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &vv));
+    ASSERT_EQ(vv.size(), 1);
+    ASSERT_EQ(vv[0], i);
+  }
+
+  v.clear();
+  for (int i = 0; i < 16; i++) {
+    v.emplace_back(
+        [&](int begin, int end) {
+          for (int i = begin; i < end; i++) {
+            ASSERT_TRUE(ht.Insert(nullptr, i, i + 1));
+          }
+        },
+        i * n, i * n + n);
+  }
+  for (auto &x : v) {
+    x.join();
+  }
+  ht.VerifyIntegrity();
+  for (int i = 0; i < 16 * n; i++) {
+    std::vector<int> vv;
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &vv));
+    std::vector<int> std = {i, i + 1};
+    std::sort(vv.begin(), vv.end());
+    ASSERT_EQ(vv, std);
+  }
+
+  v.clear();
+  for (int i = 0; i < 16; i++) {
+    v.emplace_back(
+        [&](int begin, int end) {
+          for (int i = begin; i < end; i++) {
+            ASSERT_TRUE(ht.Remove(nullptr, i, i));
+          }
+        },
+        i * n, i * n + n);
+  }
+  for (auto &x : v) {
+    x.join();
+  }
+  ht.VerifyIntegrity();
+  for (int i = 0; i < 16 * n; i++) {
+    std::vector<int> vv;
+    ASSERT_TRUE(ht.GetValue(nullptr, i, &vv));
+    ASSERT_EQ(vv.size(), 1);
+    ASSERT_EQ(vv[0], i + 1);
+  }
+  v.clear();
+  for (int i = 0; i < 16; i++) {
+    v.emplace_back(
+        [&](int begin, int end) {
+          for (int i = begin; i < end; i++) {
+            ASSERT_TRUE(ht.Remove(nullptr, i, i + 1));
+          }
+        },
+        i * n, i * n + n);
+  }
+  for (auto &x : v) {
+    x.join();
+  }
+  ht.VerifyIntegrity();
+  for (int i = 0; i < 16 * n; i++) {
+    std::vector<int> vv;
+    ASSERT_FALSE(ht.GetValue(nullptr, i, &vv));
   }
 
   disk_manager->ShutDown();
