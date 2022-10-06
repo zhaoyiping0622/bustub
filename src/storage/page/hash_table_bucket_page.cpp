@@ -56,17 +56,7 @@ bool HASH_TABLE_BUCKET_TYPE::Insert(KeyType key, ValueType value, KeyComparator 
       occupy_index = i;
     }
   }
-  if (occupy_index != BUCKET_ARRAY_SIZE) {
-    SetOccupied(occupy_index);
-    array_[occupy_index] = {key, value};
-    tail_.properties_.readable_count_++;
-    SetReadable(occupy_index);
-  } else {
-    assert(tail_.properties_.readable_count_ == BUCKET_ARRAY_SIZE - 1);
-    SetOccupied(BUCKET_ARRAY_SIZE - 1);
-    tail_.value_ = {key, value};
-    SetReadable(BUCKET_ARRAY_SIZE - 1);
-  }
+  InsertAt(key, value, occupy_index == BUCKET_ARRAY_SIZE ? BUCKET_ARRAY_SIZE - 1 : occupy_index);
   return true;
 }
 
@@ -189,6 +179,29 @@ uint32_t HASH_TABLE_BUCKET_TYPE::NumReadable() {
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BUCKET_TYPE::IsEmpty() {
   return NumReadable() == 0;
+}
+
+template <typename KeyType, typename ValueType, typename KeyComparator>
+void HASH_TABLE_BUCKET_TYPE::ReOrganize() {
+  if (IsFull() || NumReadable() + 1 == BUCKET_ARRAY_SIZE) {
+    return;
+  }
+  uint32_t tail = 0;
+  for (uint32_t i = 0; i < BUCKET_ARRAY_SIZE - 1; i++) {
+    if (!IsOccupied(i)) {
+      break;
+    }
+    if (IsReadable(i)) {
+      array_[tail] = array_[i];
+      SetOccupied(tail);
+      SetReadable(tail);
+      tail++;
+    }
+  }
+  for (uint32_t i = tail; i < BUCKET_ARRAY_SIZE; i++) {
+    SetUnoccupied(i);
+    SetUnreadable(i);
+  }
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>

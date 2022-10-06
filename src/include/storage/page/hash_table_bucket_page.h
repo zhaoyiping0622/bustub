@@ -145,6 +145,8 @@ class HashTableBucketPage {
    */
   void PrintBucket();
 
+  void ReOrganize();
+
  private:
   void SetUnreadable(uint32_t bucket_idx);
   void SetUnoccupied(uint32_t bucket_idx);

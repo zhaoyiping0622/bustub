@@ -266,44 +266,45 @@ bool HASH_TABLE_TYPE::IncrLocalDepth(HashTableDirectoryPage *directory, uint32_t
   uint32_t local_depth = directory->GetLocalDepth(bucket_idx);
   uint32_t current_local_mask = directory->GetLocalDepthMask(bucket_idx);
   uint32_t current_local_value = bucket_idx & current_local_mask;
-  Page *bucket_page = buffer_pool_manager_->FetchPage(bucket_page_id);
 
+  uint32_t new_local_mask = current_local_mask << 1 | 1;
+  uint32_t new_local_value[2] = {current_local_value, current_local_value | (1 << local_depth)};
+
+  Page *bucket_page = buffer_pool_manager_->FetchPage(bucket_page_id);
   HASH_TABLE_BUCKET_TYPE *bucket = FetchBucketPage(bucket_page);
-  bucket_page->RLatch();
-  page_id_t new_bucket_page_id[2] = {INVALID_PAGE_ID, INVALID_PAGE_ID};
+  bucket_page->WLatch();
+
+  page_id_t new_bucket_page_id[2] = {bucket_page_id};
+
+  Page *new_page = buffer_pool_manager_->NewPage(new_bucket_page_id + 1);
+  HASH_TABLE_BUCKET_TYPE *new_bucket = FetchBucketPage(new_page);
+  uint32_t tail_new_local_value = Hash(bucket->KeyAt(BUCKET_ARRAY_SIZE - 1)) & new_local_mask;
+  assert(tail_new_local_value == new_local_value[0] || tail_new_local_value == new_local_value[1]);
+
   uint32_t page_count[2] = {0, 0};
+
   // move data
-  for (uint32_t i = 0; i < 2; i++) {
-    uint32_t new_local_mask = current_local_mask << 1 | 1;
-    uint32_t new_local_value = current_local_value | (i << local_depth);
-    Page *new_page = buffer_pool_manager_->NewPage(new_bucket_page_id + i);
-    HASH_TABLE_BUCKET_TYPE *new_bucket = FetchBucketPage(new_page);
-    if (new_page == nullptr) {
-      return false;
+  for (uint32_t i = BUCKET_ARRAY_SIZE; i > 0; i--) {
+    auto key = bucket->KeyAt(i - 1);
+    auto value = bucket->ValueAt(i - 1);
+    uint32_t local_value = Hash(key) & new_local_mask;
+    assert(local_value == new_local_value[0] || local_value == new_local_value[1]);
+    if (local_value == new_local_value[1]) {
+      bucket->RemoveAt(i - 1);
+      new_bucket->InsertAt(key, value, page_count[1]++);
+    } else {
+      page_count[0]++;
     }
-    uint32_t tail = 0;
-    for (uint32_t j = 0; j < BUCKET_ARRAY_SIZE; j++) {
-      if (bucket->IsReadable(j)) {
-        KeyType key = bucket->KeyAt(j);
-        ValueType value = bucket->ValueAt(j);
-        uint32_t key_local_value = (Hash(key) & new_local_mask);
-        if (key_local_value == new_local_value) {
-          new_bucket->InsertAt(key, value, tail++);
-          page_count[i]++;
-          if (!bucket->IsReadable(j)) {
-            new_bucket->RemoveAt(j);
-          }
-        }
-      }
-    }
-    buffer_pool_manager_->UnpinPage(new_bucket_page_id[i], true);
   }
+
+  buffer_pool_manager_->UnpinPage(new_bucket_page_id[1], true);
+
   // LOG_INFO("page_count[0] %u page_count[1] %u num %u bucket_idx %u", page_count[0], page_count[1],
   // bucket->NumReadable(), bucket_idx);
-  assert(page_count[0] + page_count[1] == bucket->NumReadable());
-  bucket_page->RUnlatch();
-  buffer_pool_manager_->UnpinPage(bucket_page_id, false);
-  buffer_pool_manager_->DeletePage(bucket_page_id);
+  assert(page_count[0] + page_count[1] == BUCKET_ARRAY_SIZE);
+  bucket->ReOrganize();
+  bucket_page->WUnlatch();
+  buffer_pool_manager_->UnpinPage(bucket_page_id, true);
   for (uint32_t i = 0; i < directory->Size(); i++) {
     if (directory->GetBucketPageId(i) == bucket_page_id) {
       directory->SetBucketPageId(i, new_bucket_page_id[(i >> local_depth) & 1]);
